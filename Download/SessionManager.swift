@@ -16,8 +16,13 @@ public enum SessionConfigurationIdentifier: String {
 
 
 public class SessionManager<T: TaskType> {
+    
+    
+    public var backgroundErrorCompletionHandler: ((Error?) -> Void)?
+    
+    
     /// The underlying session.
-    internal let session: AVAssetDownloadURLSession
+    public let session: AVAssetDownloadURLSession
     
     /// The session delegate handling all the task and session delegate callbacks.
     internal(set) public var delegate: SessionDelegate<T>
@@ -49,14 +54,40 @@ public class SessionManager<T: TaskType> {
         configuration: URLSessionConfiguration = URLSessionConfiguration.background(withIdentifier: SessionConfigurationIdentifier.default.rawValue),
         delegate: SessionDelegate<T> = SessionDelegate())
     {
+        
+        configuration.isDiscretionary = true
+        configuration.sessionSendsLaunchEvents = true
+        
         self.delegate = delegate
         self.session = AVAssetDownloadURLSession(configuration: configuration,
                                                  assetDownloadDelegate: delegate,
                                                  delegateQueue: OperationQueue.main)
-        
+
         delegate.sessionDidFinishEventsForBackgroundURLSession = { [weak self] session in
+            guard let strongSelf = self else {return}
+            DispatchQueue.main.async {
+                strongSelf.backgroundCompletionHandler?()
+                
+            }
+        }
+        
+        delegate.sessionDidCompleteWithError = { [weak self] session , error in
             guard let strongSelf = self else { return }
-            DispatchQueue.main.async { strongSelf.backgroundCompletionHandler?() }
+
+            DispatchQueue.main.async {
+                strongSelf.backgroundErrorCompletionHandler?(error)
+                if let taskError = error as NSError? {
+                    if let reason = taskError.userInfo[NSURLErrorBackgroundTaskCancelledReasonKey] as? Int {
+                        let code = taskError.code
+                        if reason == NSURLErrorCancelledReasonUserForceQuitApplication &&
+                            code == NSURLErrorCancelled {
+                            print("Previous download was failed with NSURLErrorCancelledReasonUserForceQuitApplication error, Will cancel all previous download tasks ")
+                            self?.cancelAllTasks()
+                            
+                        }
+                    }
+                }
+            }
         }
     }
     
@@ -114,32 +145,52 @@ extension SessionManager where T == Task {
 }
 
 extension SessionManager {
-    public func restoreTask(with assetId: String, callback: @escaping (AVAssetDownloadTask?) -> Void) {
-        print("🛏 Restoring DownloadTask for",assetId)
+    public func cancelAllTasks() {
+        print("🚨 Cancelling all previous downloadTasks")
         session
             .getAllTasks{ [weak self] tasks in
+                let _ = tasks
+                    .compactMap{ task -> AVAggregateAssetDownloadTask? in
+                        guard let assetTask = task as? AVAggregateAssetDownloadTask else {
+                            print("❌ Ignoring \(task.taskDescription). Task is not an AVAssetDownloadTask. ")
+                            return nil
+                        }
+                        assetTask.cancel()
+                        self?.printRelovedState(for: assetTask)
+                        return assetTask
+            }
+        }
+    }
+}
+
+extension SessionManager {
+    public func restoreTask(with assetId: String, callback: @escaping (AVAggregateAssetDownloadTask?) -> Void) {
+        print("🛏 Restoring DownloadTask for",assetId)
+        session
+            .getAllTasks{  tasks in
                 let someTask = tasks
                     .filter{ $0.taskDescription == assetId }
                     .first
-                
-                guard let task = someTask, let assetTask = task as? AVAssetDownloadTask else {
+
+                guard let task = someTask, let assetTask = task as? AVAggregateAssetDownloadTask else {
                     callback(nil)
                     return
                 }
                 
                 print("♻️ Found AVAssetDownloadTask \(assetId)",assetTask.urlAsset.url)
-                self?.printRelovedState(for: assetTask)
+                self.printRelovedState(for: assetTask)
+
                 callback(assetTask)
         }
     }
     
-    public func restoreTasks(callback: @escaping ([AVAssetDownloadTask]) -> Void) {
+    public func restoreTasks(callback: @escaping ([AVAggregateAssetDownloadTask]) -> Void) {
         print("🛏 Restoring DownloadTasks...")
         session
             .getAllTasks{ [weak self] tasks in
                 let downloadTasks = tasks
-                    .flatMap{ task -> AVAssetDownloadTask? in
-                        guard let assetTask = task as? AVAssetDownloadTask else {
+                    .compactMap{ task -> AVAggregateAssetDownloadTask? in
+                        guard let assetTask = task as? AVAggregateAssetDownloadTask else {
                             print("❌ Ignoring \(task.taskDescription). Task is not an AVAssetDownloadTask. ")
                             return nil
                         }
@@ -149,7 +200,7 @@ extension SessionManager {
                             return nil
                         }
                         
-                        print("♻️ Found AVAssetDownloadTask \(assetId)",assetTask.urlAsset.url)
+                        // print("♻️ Found AVAssetDownloadTask \(assetId)",assetTask.urlAsset.url)
                         
                         self?.printRelovedState(for: assetTask)
                         return assetTask
@@ -158,12 +209,15 @@ extension SessionManager {
         }
     }
     
-    private func printRelovedState(for assetTask: AVAssetDownloadTask) {
+    private func printRelovedState(for assetTask: AVAggregateAssetDownloadTask) {
+
         switch assetTask.state {
-        case .canceling: print("canceling")
+        case .canceling:print("canceling")
         case .running: print("running")
         case .suspended: print("suspended")
         case .completed: print("completed")
+        default:
+            print("printRelovedState : default")
         }
         if let taskError = assetTask.error as? NSError {
             if let reason = taskError.userInfo[NSURLErrorBackgroundTaskCancelledReasonKey] as? Int {

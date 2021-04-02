@@ -18,6 +18,7 @@ public class TaskDelegate<T: TaskType>: NSObject {
 }
 
 extension TaskDelegate {
+    
     internal func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         guard let downloadTask = downloadTask else {
             return
@@ -37,40 +38,7 @@ extension TaskDelegate {
             }
             
             // Success
-            guard let resolvedMedia = downloadTask.responseData.resolvedMediaSelection else {
-                // 1. No more media available. Trigger onCompleted
-                print("✅ DownloadTask completed.")
-                downloadTask.eventPublishTransmitter.onCompleted(downloadTask, location)
-                return
-            }
-            
-            // 2. Ask, by callback, if and which additional AVMediaSelectionOption's should be included
-            if let urlAsset = downloadTask.task?.urlAsset, let newSelection = downloadTask.eventPublishTransmitter.onShouldDownloadMediaOption(downloadTask, AdditionalMedia(asset: urlAsset)) {
-                
-                // 2.1 User indicated additional media is requested
-                let currentMediaOption = resolvedMedia.mutableCopy() as! AVMutableMediaSelection
-                
-                currentMediaOption.select(newSelection.option, in: newSelection.group)
-                
-                let options = [AVAssetDownloadTaskMediaSelectionKey: currentMediaOption]
-                
-                downloadTask.createAndConfigureTask(with: options, using: downloadTask.configuration) { [weak self] urlTask, error in
-                    guard let updatedTask = self?.downloadTask else { return }
-                    guard error == nil else {
-                        updatedTask.eventPublishTransmitter.onError(updatedTask, updatedTask.responseData.destination, error!)
-                        return
-                    }
-                    updatedTask.eventPublishTransmitter.onDownloadingMediaOption(updatedTask, newSelection)
-                }
-                
-                downloadTask.resume()
-//                onResumed(self)
-            }
-            else {
-                // 2.2 No additional media was requested
-                print("✅ DownloadTask completed.")
-                downloadTask.eventPublishTransmitter.onCompleted(downloadTask, location)
-            }
+            downloadTask.eventPublishTransmitter.onCompleted(downloadTask, location)
         }
     }
     
@@ -102,7 +70,7 @@ extension TaskDelegate {
     ///
     /// This delegate callback should only be used to save the location URL somewhere in your application. Any additional work should be done in `URLSessionTaskDelegate.urlSession(_:task:didCompleteWithError:)`.
     @available(iOS 10.0, *)
-    internal func urlSession(_ session: URLSession, assetDownloadTask: AVAssetDownloadTask, didFinishDownloadingTo location: URL) {
+    internal func urlSession(_ session: URLSession, assetDownloadTask: AVAggregateAssetDownloadTask, didFinishDownloadingTo location: URL) {
         print("didFinishDownloadingTo",location)
         
         if let size = try? Int64(FileManager.default.allocatedSizeOfDirectory(atUrl: location)) {
@@ -117,7 +85,7 @@ extension TaskDelegate {
     }
     
     @available(iOS 9.0, *)
-    internal func urlSession(_ session: URLSession, assetDownloadTask: AVAssetDownloadTask, didLoad timeRange: CMTimeRange, totalTimeRangesLoaded loadedTimeRanges: [NSValue], timeRangeExpectedToLoad: CMTimeRange) {
+    internal func urlSession(_ session: URLSession, assetDownloadTask: AVAggregateAssetDownloadTask, didLoad timeRange: CMTimeRange, totalTimeRangesLoaded loadedTimeRanges: [NSValue], timeRangeExpectedToLoad: CMTimeRange) {
         guard let downloadTask = downloadTask else { return }
         var percentComplete = 0.0
         
@@ -132,7 +100,7 @@ extension TaskDelegate {
     }
     
     @available(iOS 9.0, *)
-    internal func urlSession(_ session: URLSession, assetDownloadTask: AVAssetDownloadTask, didResolve resolvedMediaSelection: AVMediaSelection) {
+    internal func urlSession(_ session: URLSession, assetDownloadTask: AVAggregateAssetDownloadTask, didResolve resolvedMediaSelection: AVMediaSelection) {
         guard let downloadTask = downloadTask else { return }
         downloadTask.responseData.resolvedMediaSelection = resolvedMediaSelection
     }

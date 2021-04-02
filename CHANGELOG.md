@@ -1,7 +1,64 @@
 # CHANGELOG
 
+* `2.2.50` Release - [2.2.50](#2250)
+* `2.2.40` Release - [2.2.40](#2240)
+* `2.2.30` Release - [2.2.30](#2210)
+* `2.2.20` Release - [2.2.20](#2220)
+* `2.2.10` Release - [2.2.10](#2210)
+* `2.2.00` Release - [2.2.00](#2200)
+* `0.93.x` Releases - [0.93.0](#0930)
+* `0.80.x` Releases - [0.80.0](#0800)
 * `0.72.x` Releases - [0.72.0](#0720)
 * `0.1.x` Releases - [0.1.0](#010)
+
+
+## 2.2.500
+#### Bug Fixes
+* `EMP-1580` Migrate the SDK download task from `AVAssetDownloadTask` to `AVAggregateAssetDownloadTask`
+* `EMP-1580` Fix mutiple file downloads when specifying `audios & subtitles` by using `AVAggregateAssetDownloadTask`.
+
+
+## 2.2.400
+#### Bug Fixes
+* `EMP-15755` Cancel all dowload tasks when `NSURLErrorCancelledReasonUserForceQuitApplication` error occured.
+
+## 2.2.300
+#### Changes
+* `EMP-15078` Add `onLicenceRenewed` event listener 
+
+
+## 2.2.200
+#### Bug Fixes
+* Add `-weak_framework AVfoundation` to fix Xcode compile errors
+
+
+## 2.2.100
+#### Features
+* `EMP-14806` Update support for downloading additional media : audio & subtitles
+
+#### Changes
+* `EMP-14806`  Updated to Swift 5
+* `EMP-14806`  Now the download module support iOS 11 & up versions 
+
+
+## 2.2.000
+#### Features
+* `EMP-14376` Update support for downloads 
+
+## 0.108.0
+
+#### Changes
+* `EMP-12783`  Updated to Swift 4.2
+
+## 0.93.0
+
+#### Changes
+* submodules no longer added through ssh
+
+## 0.80.0,
+
+#### Changes
+* `EMP-11156` Standardized error messages and introduced an `info` variable
 
 ## 0.72.0
 * Build pipe improvements

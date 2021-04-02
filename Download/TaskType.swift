@@ -17,7 +17,7 @@ public protocol TaskType: class, EventPublisher {
     var fairplayRequester: FairplayRequester? { get }
     var eventPublishTransmitter: EventPublishTransmitter<Self> { get }
     
-    var task: AVAssetDownloadTask? { get }
+    var task: AVAggregateAssetDownloadTask? { get }
     
     associatedtype DownloadState
     
@@ -41,48 +41,80 @@ extension TaskType {
 }
 
 extension TaskType {
-    public func createAndConfigureTask(with options: [String: Any]?, using configuration: Configuration, callback: (AVAssetDownloadTask?, TaskError?) -> Void) {
+    public func createAndConfigureTask(with options: [String: Any]?, using configuration: Configuration, callback: (AVAggregateAssetDownloadTask?, TaskError?) -> Void) {
         guard let url = configuration.url else {
             callback(nil, TaskError.targetUrlNotFound)
             return
         }
+  
+        var preferredMedia = [AVMediaSelection]()
         
-        if #available(iOS 10.0, *) {
-            guard let task = sessionManager
-                .session
-                .makeAssetDownloadTask(asset: AVURLAsset(url: url),
-                                       assetTitle: configuration.identifier,
-                                       assetArtworkData: configuration.artwork,
-                                       options: options) else {
-                                        // This method may return nil if the AVAssetDownloadURLSession has been invalidated.
-                                        callback(nil, TaskError.downloadSessionInvalidated)
-                                        return
+        if configuration.allAudiosSubs == true {
+            preferredMedia = AVURLAsset(url: url).allMediaSelections
+        } else {
+            
+            // preferredMedia = [AVURLAsset(url: url).preferredMediaSelection]
+            /* preferredMediaSelection.removeAll()
+            if let group = AVURLAsset(url: url).mediaSelectionGroup(forMediaCharacteristic: AVMediaCharacteristic.legible) {
+                if let subtitles = configuration.subtitles {
+                    for sub in subtitles {
+                        if let subtitle = group.options.first(where: { $0.displayName == sub }) {
+                            for media in AVAsset(url: url).allMediaSelections {
+                                if let mediaSelection = media.mutableCopy() as? AVMutableMediaSelection {
+                                
+                                    mediaSelection.select(subtitle, in: group)
+                                    
+                                    if !preferredMediaSelection.contains(mediaSelection) {
+                                        preferredMediaSelection.append(mediaSelection)
+                                        
+                                       
+                                    }
+                                    
+                                }
+                                
+                            }
+                        }
+                    }
+                }
             }
-            task.taskDescription = configuration.identifier
-            configureResourceLoader(for: task)
-            callback(task,nil)
+
+            if let group = AVURLAsset(url: url).mediaSelectionGroup(forMediaCharacteristic: AVMediaCharacteristic.audible) {
+                if let audios = configuration.audios {
+                    for audio in audios {
+                        // if let audioOption = AVMediaSelectionGroup.mediaSelectionOptions(from: group.options, with: Locale(identifier: audio)).first {
+                        if let audioLang = group.options.first(where: { $0.displayName == audio }) {
+                            for media in AVAsset(url: url).allMediaSelections {
+                                if let mediaSelection = media.mutableCopy() as? AVMutableMediaSelection {
+                                    mediaSelection.select(audioLang, in: group)
+
+                                    if !preferredMediaSelection.contains(mediaSelection) {
+                                        preferredMediaSelection.append(mediaSelection)
+                                    }
+                                }
+
+                            }
+                        }
+                    }
+                }
+            } */
+            
         }
-        else {
-            guard let destination = responseData.destination else {
-                callback(nil, TaskError.failedToStartTaskWithoutDestination)
-                return
-            }
-            guard let task = sessionManager
-                .session
-                .makeAssetDownloadTask(asset: AVURLAsset(url: url),
-                                       destinationURL: destination,
-                                       options: options) else {
-                                        // This method may return nil if the URLSession has been invalidated
-                                        callback(nil, TaskError.downloadSessionInvalidated)
-                                        return
-            }
-            task.taskDescription = configuration.identifier
-            configureResourceLoader(for: task)
-            callback(task,nil)
+    
+        
+        // Use aggregateAssetDownloadTask
+        guard let task = sessionManager.session.aggregateAssetDownloadTask(with: AVURLAsset(url: url), mediaSelections: preferredMedia, assetTitle: configuration.identifier, assetArtworkData: configuration.artwork, options: options) else {
+            callback(nil, TaskError.downloadSessionInvalidated)
+            return
         }
+        
+        task.taskDescription = configuration.identifier
+        configureResourceLoader(for: task)
+
+        callback(task,nil)
+
     }
     
-    public func configureResourceLoader(for task: AVAssetDownloadTask) {
+    public func configureResourceLoader(for task: AVAggregateAssetDownloadTask) {
         if fairplayRequester != nil {
             if task.urlAsset.resourceLoader.delegate != nil {
                 task.urlAsset.resourceLoader.setDelegate(nil, queue: nil)
@@ -98,10 +130,10 @@ extension TaskType {
 }
 
 extension TaskType {
-    public func handle(restoredTask: AVAssetDownloadTask) {
-        print("👍 DownloadTask restored")
-        
+    public func handle(restoredTask: AVAggregateAssetDownloadTask) {
+
         switch restoredTask.state {
+            
         case .running:
             eventPublishTransmitter.onPrepared(self)
             eventPublishTransmitter.onResumed(self)
